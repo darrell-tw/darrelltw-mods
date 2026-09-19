@@ -1,6 +1,6 @@
 {
   "name": "tw-stock-mod",
-  "version": "0.13.4",
+  "version": "0.13.5",
   "description": "Watchlist band above the Claude Code prompt: Taiwan hours show the Taiwan list (紅漲綠跌), US hours show the US list (綠漲紅跌), in a broker-style table with a Solari split-flap footer, plus a 損益 mode (P&L view) for your holdings. 20 symbols a market, 10 on screen at a time. Live prices from Yahoo by default, no key and no account; 永豐 Shioaji (macOS/Linux) and 群益 Capital (Windows) are opt-in real-time routes the band runs itself, tried in your own preference order (twSources) - keep that order and any broker paths in a user-level ~/.claude/stock-band.json so a shared project config stays neutral. Needs function hooks (early access) and an interactive terminal. Zero model tokens.",
   "author": {
     "name": "Darrell Wang",

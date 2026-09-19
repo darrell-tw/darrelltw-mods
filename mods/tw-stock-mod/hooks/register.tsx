@@ -224,18 +224,25 @@ type ColumnMode = 'auto' | 1 | 2
 type SortKey = 'change' | 'list' | 'marketcap' | 'volume'
 /**
  * How the band lets a person jump between the market/holdings stops (see
- * marketStops()): `tabs` draws every stop as its own Button, `select`
- * draws the existing dropdown, `cycle` draws one Button that walks the
- * stops in order. `select` is the default. `tabs` was tried 2026-09-19 at
- * the user's request (the Select's own reflow/highlight chrome is the
- * engine's, not something this mod can restyle) and dropped after width
- * measurements on a real terminal showed it does not reliably fit - see
- * defaultConfig's own comment on marketSwitcher for the numbers. `tabs` and
- * `cycle` stay as config-switchable alternatives. See parseConfigRoot for
- * how a config file picks one; an invalid value falls back to `select`
- * rather than throwing.
+ * marketStops()): `tabs` draws every stop as its own Button, `select` draws
+ * the engine's own dropdown, `cycle` draws one Button that walks the stops
+ * in order, `menu` draws a header Button that opens a column of option
+ * Buttons below it. `menu` is the default (2026-09-19, at the user's
+ * request): every option in `select`'s dropdown is a Select value, and the
+ * engine's Select only lets the keyboard pick one while it holds focus -
+ * arrows move, Enter picks - a mouse click on an option does nothing (d.ts's
+ * own SelectProps carries no `onPress`/click path). `menu`'s options are
+ * plain Buttons, so they take a click the same way every other Button in
+ * this row already does. `tabs` was tried 2026-09-19 at the user's request
+ * (the Select's own reflow/highlight chrome is the engine's, not something
+ * this mod can restyle) and dropped after width measurements on a real
+ * terminal showed it does not reliably fit - see defaultConfig's own
+ * comment on marketSwitcher for the numbers. `tabs`, `select` and `cycle`
+ * stay as config-switchable alternatives. See parseConfigRoot for how a
+ * config file picks one; an invalid value falls back to `menu` rather than
+ * throwing.
  */
-type MarketSwitcher = 'tabs' | 'select' | 'cycle'
+type MarketSwitcher = 'tabs' | 'select' | 'cycle' | 'menu'
 
 type Ticker = {
   code: string
@@ -941,9 +948,17 @@ function defaultConfig(): Config {
     // `holdings` block the same way tw/us do.
     holdings: { tw: [], us: [], crypto: [] },
     holdingsSource: 'file',
-    // `select`, the dropdown. It collapses to about 12 columns, the same
-    // order as `cycle`, and it shows every stop at once when opened rather
-    // than making a person walk the ring to find out what exists.
+    // `menu`, a header Button that opens a column of option Buttons below it
+    // (2026-09-19, at the user's request, replacing `select` as the
+    // default): `select`'s dropdown reads great but only the keyboard can
+    // pick an option out of it - the engine's own Select has no click path
+    // on an option, arrows-and-Enter only while it holds focus - and a
+    // mouse-first person had no way to land on a stop directly. `menu`'s
+    // options are plain Buttons, clickable the same way every other Button
+    // in this row already is, and it costs about the same columns closed as
+    // `select` did (see marketControlWidth's own `menu` branch) - only
+    // opening it costs more, and only downward, the same way `select`'s own
+    // dropdown already did.
     //
     // NOT `tabs`, measured on a real 100-column terminal (2026-09-19): the
     // tabs row needs 30 columns, and the header line it shares already spends
@@ -951,9 +966,11 @@ function defaultConfig(): Config {
     // restatement, on top of RIGHT_BUTTON_GROUP_COLS. That totals ~106, so
     // tabs fits only a terminal wider than most, and at 100 it silently drops
     // the Taipei hours instead. `tabs` stays available for a wide terminal,
-    // `cycle` for a narrow one - and `cycle` is what `select` falls back to
-    // wherever the surface has no Select element (mobile). See MarketSwitcher.
-    marketSwitcher: 'select',
+    // `cycle` for a narrow one, `select` for a keyboard-first person - and
+    // `cycle` is what `select` falls back to wherever the surface has no
+    // Select element (mobile); `menu` never falls back, since it needs
+    // nothing but Buttons. See MarketSwitcher.
+    marketSwitcher: 'menu',
   }
 }
 
@@ -1135,9 +1152,9 @@ function parseConfigRoot(root: Record<string, unknown> | undefined): Config {
   }
   if (root.holdingsSource === 'config') cfg.holdingsSource = 'config'
   const marketSwitcher = root.marketSwitcher
-  if (marketSwitcher === 'tabs' || marketSwitcher === 'select' || marketSwitcher === 'cycle') {
+  if (marketSwitcher === 'tabs' || marketSwitcher === 'select' || marketSwitcher === 'cycle' || marketSwitcher === 'menu') {
     cfg.marketSwitcher = marketSwitcher
-  } // anything else (including the default '貓'-style typo) keeps defaultConfig()'s 'select'
+  } // anything else (including the default '貓'-style typo) keeps defaultConfig()'s 'menu'
   return cfg
 }
 
@@ -2057,6 +2074,13 @@ let snoozedUntil = 0
 // the chart view walks the list one symbol at a time and then returns to the
 // table, so one button covers both "show me the chart" and "next symbol"
 let view: View = 'table'
+// `menu`'s own toggle: closed until pressed, closed again by any market
+// switch from any switcher style (onSelectMarket/onCycle both clear it - see
+// their own comments) so a stale open menu never survives a jump made
+// through a different control. Module state, not per-render, for the same
+// reason `view`/`page`/`snoozedUntil` above are: it has to survive the next
+// render, and a fresh session simply starts with it closed.
+let marketMenuOpen = false
 // which code the chart view is following, not which position: `shown` gets
 // re-sorted every render whenever `sort !== 'list'`, so a position would
 // silently start following whatever rank crossed into it. undefined (never
@@ -2307,6 +2331,13 @@ function marketButtonLabel(marketLabel: string, pnl: boolean): string {
 // hook cannot measure - SELECT_LABEL_CHROME_COLS covers that separator.
 const MARKET_SELECT_LABEL = '市場'
 const SELECT_LABEL_CHROME_COLS = 2
+
+// `menu`'s own prefix - a plain Button has no framework-supplied "market: "
+// chrome the way Select does (see MARKET_SELECT_LABEL/SELECT_LABEL_CHROME_
+// COLS above), so this bakes the colon straight into the label text:
+// `市場：台股 ▾`, reading like the Select's own collapsed `市場: 台股 ▾`
+// while costing `menu`'s own width budget, not another switcher's constant.
+const MARKET_MENU_LABEL = '市場：'
 
 // A stop's packed identity: the plain MarketId for a table stop, or
 // `${MarketId}:pnl` for that market's holdings stop - see marketStops()/
@@ -3454,6 +3485,12 @@ export const register: Register = on => {
       turnSeq += 1
     }
     const onCycle = () => {
+      // `menu` is never the switcher a `cycle` press draws from (cycle only
+      // runs when the resolved style IS `cycle` - see `switcher` below), but
+      // a person can still have left it open on an earlier render before a
+      // config reload dropped to `cycle` - close it so a later reload back
+      // to `menu` does not reopen on a stop that has since moved on.
+      marketMenuOpen = false
       const nextStop = nextCycleStop({ market: props.market, pnl: props.view === 'pnl' }, cycleStops)
       // A market switch starts the table back at page 0: the two markets'
       // page counts have no relation to each other, so carrying the old
@@ -3487,6 +3524,18 @@ export const register: Register = on => {
     // exists), so a pick behaves identically to the fallback button landing
     // on the same stop.
     const onSelectMarket = (value: string) => {
+      // `menu`'s own option Buttons call this directly rather than a second
+      // copy of "close the menu" (see the option Buttons below) - closing
+      // unconditionally, before the same-stop early return just below, is
+      // what actually hides an open menu when someone presses the stop
+      // already on screen (that press still has to close the menu even
+      // though nothing else about the board changes). `tabs`'s own Buttons
+      // call this too; the menu is never open while `tabs` is the resolved
+      // switcher, so this is a no-op there, not a special case to guard.
+      if (marketMenuOpen) {
+        marketMenuOpen = false
+        $.ui.invalidate('ui.render')
+      }
       // Every value marketSelectOptions() hands out is a MarketSelectValue -
       // see its own comment - so splitting on the literal ':pnl' suffix is
       // exhaustive, not a guess.
@@ -3504,6 +3553,13 @@ export const register: Register = on => {
       resetPnlScroll() // "changing the stop" always resets the pnl scroll position, same as onCycle
       if (view === 'pnl') turnPnl() // landing on the pnl stop flaps it in, like a mount
       if (!quotesFor(pickMarket(now, modeOverride).market, now)) requestFeed?.()
+      $.ui.invalidate('ui.render')
+    }
+    // `menu`'s own header Button: opens/closes the option column below it,
+    // nothing else - it never itself picks a stop (see the option Buttons,
+    // which call onSelectMarket the same way tabs' own Buttons do).
+    const onToggleMenu = () => {
+      marketMenuOpen = !marketMenuOpen
       $.ui.invalidate('ui.render')
     }
     const onSnooze = () => {
@@ -3570,13 +3626,17 @@ export const register: Register = on => {
     const chart = props.view === 'chart'
     const pnl = props.view === 'pnl'
     const table = props.view === 'table'
-    // Which of the three switcher styles this render actually draws.
+    // Which of the four switcher styles this render actually draws.
     // `select` needs a real Select (canSelect) or it drops to `cycle`, the
     // rule this already had; `tabs` needs its own five Buttons to fit next
     // to the session state/hours and the right-side button group or it
     // drops to `cycle` too - same direction as `select`'s fallback, so a
     // style this environment/terminal cannot draw never fails silently into
     // something broken, always into the one style every surface can draw.
+    // `menu` needs nothing but Buttons (its header AND its options - see the
+    // JSX below), which every surface this hook already runs on has, so it
+    // never falls back to anything: `requestedSwitcher` passes straight
+    // through untouched below.
     // `cols` is measured up front (see its own definition above), so this
     // check runs before anything else in the row has committed to a layout.
     const requestedSwitcher = config.marketSwitcher
@@ -3596,23 +3656,31 @@ export const register: Register = on => {
     const cyclePos = (cycleIdx < 0 ? 0 : cycleIdx) + 1
     // marketLabel is `cycle`'s own on-screen Button label when the switcher
     // resolves there (mobile's fallback, an explicit `marketSwitcher:
-    // "cycle"`, or `tabs` collapsing for width); otherwise it is only
-    // `select`'s on-screen width proxy in the budget math right below,
-    // since there is no way to measure what the framework actually renders
-    // from inside the hook - a dropdown showing the same market name costs
-    // about the same columns as the button that used to carry it.
+    // "cycle"`, or `tabs` collapsing for width); for `select` and `menu` it
+    // is instead the on-screen width proxy in the budget math right below
+    // AND `menu`'s own header label - both draw `marketButtonLabel`'s `美股
+    // ▾` shape, `select` behind the engine's dropdown chrome, `menu` behind
+    // its own literal `市場：` prefix (see MARKET_MENU_LABEL) - since there
+    // is no way to measure what the framework actually renders from inside
+    // the hook, a dropdown or a menu header showing the same market name
+    // costs about the same columns as the button that used to carry it.
     const marketLabel =
       switcher === 'cycle'
         ? cycleButtonLabel(props.marketLabel, pnl, cyclePos, cycleStops.length)
         : marketButtonLabel(props.marketLabel, pnl)
     // `tabs` swaps in its own multi-Button width instead of marketLabel's -
-    // see tabsGroupWidth's own comment for what it counts.
+    // see tabsGroupWidth's own comment for what it counts. `menu` reserves
+    // its own literal `市場：` prefix the same way `select` reserves the
+    // engine's `市場: ` chrome, just measured directly since a Button's
+    // label is this hook's own text, not the framework's.
     const marketControlWidth =
       switcher === 'tabs'
         ? tabsGroupWidth(stops)
         : switcher === 'select'
           ? dispWidth(MARKET_SELECT_LABEL) + SELECT_LABEL_CHROME_COLS + dispWidth(marketLabel)
-          : dispWidth(marketLabel)
+          : switcher === 'menu'
+            ? dispWidth(MARKET_MENU_LABEL) + dispWidth(marketLabel)
+            : dispWidth(marketLabel)
     // The Select's own `value`: crypto never reaches `pnl` (see
     // marketStops()/onSelectMarket - there is no `crypto:pnl` stop to land
     // on), so `props.market` alone already covers that case; tw/us fold the
@@ -3680,6 +3748,14 @@ export const register: Register = on => {
                 )
                 return i === 0 ? [btn] : [<Text key={`stock-band:market:gap:${stop.value}`}> </Text>, btn]
               })
+            ) : switcher === 'menu' ? (
+              // The header alone - toggles marketMenuOpen, never picks a stop
+              // itself. Its own option column draws separately, below the
+              // whole header row (see right after this row's closing Box),
+              // not here: it has to span the row's full width and push the
+              // table/chart body down while open, which a sibling inside
+              // this row's own (row-direction, left-aligned) Box cannot do.
+              <Button key="stock-band:market" label={`${MARKET_MENU_LABEL}${marketLabel}`} onPress={onToggleMenu} />
             ) : (
               <Button key="stock-band:market" label={marketLabel} onPress={onCycle} />
             )}
@@ -3727,6 +3803,28 @@ export const register: Register = on => {
             <Button key="stock-band:snooze" label="收起 30分" onPress={onSnooze} />
           </Box>
         </Box>
+        {switcher === 'menu' && marketMenuOpen ? (
+          // `menu`'s open option column: one Button per marketStops() entry,
+          // marketStops() order, the stop actually on screen full strength
+          // and every other one dimColor (same convention `tabs`'s own
+          // active-tab check uses above). Pressing an option calls
+          // onSelectMarket directly - the same state-switch function `tabs`
+          // and `select` already use, not a second copy of it - which closes
+          // the menu itself (see onSelectMarket's own comment). Sits between
+          // the header row and the Client below, so the table/chart body is
+          // pushed down while open, the same way the engine's own Select
+          // reflows the body while its own dropdown is open.
+          <Box flexDirection="column">
+            {stops.map(stop => (
+              <Button
+                key={`stock-band:market:menu:${stop.value}`}
+                label={stop.label}
+                dimColor={!(stop.market === props.market && stop.pnl === pnl)}
+                onPress={() => onSelectMarket(stop.value)}
+              />
+            ))}
+          </Box>
+        ) : null}
         <Client
           key="stock-band:table"
           module="./board.tsx"

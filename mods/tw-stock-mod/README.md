@@ -286,6 +286,7 @@ who opens it keeps their own preference — see
 | key | default | meaning |
 | --- | --- | --- |
 | `market` | `"auto"` | the state a session starts in: `auto` picks by the clock and keeps tracking it until the market button is pressed; `tw`/`us` opens on that market instead |
+| `marketSwitcher` | `"menu"` | how the market button lets you jump between markets/holdings: `menu` (default) is a header Button (`市場：台股 ▾`) that opens a column of plain option Buttons below it — every option takes a mouse click, unlike `select`'s dropdown (below); `select` is the engine's own dropdown, `市場: ...` — reads great but its options only take the keyboard (arrows + Enter) while it holds focus, no click; `tabs` draws every stop (台股/台股庫存/美股/美股庫存/加密貨幣) as its own Button in a row, and drops to `cycle` on a terminal too narrow to fit them; `cycle` is one Button that walks the stops in order. An unrecognized value falls back to `menu` |
 | `refreshMs` | `3000` | how often the module rebuilds the snapshot (min 1000; fixed at session start — changing it needs `/reload-plugins`) |
 | `sort` | `"change"` | `change` = by change% desc, `list` = your order |
 | `highlight` | `true` | highlight the biggest mover's row (single-column table only) |
@@ -600,10 +601,15 @@ then a `holdings` block in `stock-band.json`. Set `"holdingsSource":
 whichever file exists for that market, so a hand-written position sticks
 even after 永豐 starts writing its own.
 
-損益 is not its own button — it is a STOP in the market button's own cycle:
-`[ 美股 ▾ ]` → (`美股庫存`, only if US holdings are configured) → `[ 台股 ▾ ]`
-→ `[ 台股庫存 ▾ ]` → back to 美股. Pressing the market button walks the cycle
-one stop at a time; landing on a `庫存` stop swaps the table for a P&L board:
+損益 is not its own button — it is a STOP among the market button's other
+stops: 美股 → (`美股庫存`, only if US holdings are configured) → 台股 →
+`台股庫存` → back to 美股. How you reach one depends on `marketSwitcher`
+(see [Configure](#configure)) — the default `menu` opens a column of option
+Buttons under the market button and lets you click `台股庫存` directly;
+`cycle` instead walks the stops one press at a time, `[ 美股 ▾ ]` →
+`[ 台股 ▾ ]` → `[ 台股庫存 ▾ ]` → …; `select`/`tabs` also land on a stop
+directly, from a dropdown or a row of Buttons. Landing on a `庫存` stop swaps
+the table for a P&L board:
 
 | 代號 | 名稱 | 張數 | 成本 | 現價 | 今日% | 今日損益 | 總損益 | 損益% |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |

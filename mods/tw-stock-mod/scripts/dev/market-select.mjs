@@ -1,28 +1,39 @@
-// Proves the market-switcher control itself, all three configurable styles
-// (2026-09-19, at the user's request: three interchangeable ways to try,
-// picked by `marketSwitcher` in stock-band.json - see MarketSwitcher's own
-// comment in register.tsx):
+// Proves the market-switcher control itself, all four configurable styles
+// (three since 2026-09-19 at the user's request, plus `menu` added the same
+// day when `select`'s dropdown turned out to be keyboard-only - picked by
+// `marketSwitcher` in stock-band.json, see MarketSwitcher's own comment in
+// register.tsx):
 //   - `tabs`: one Button per marketStops() entry, the current one
 //     full-strength and the rest dimColor.
-//   - `select`: the existing dropdown, now labelled `市場: ...`.
+//   - `select`: the engine's own dropdown, labelled `市場: ...` - its
+//     options are keyboard/focus-only, no click path.
 //   - `cycle`: one Button that walks marketStops() in order (mobile's own
 //     fallback, canSelect === false, draws this same style).
+//   - `menu`: a header Button (`市場：...`) that toggles a column of plain
+//     option Buttons below it - the mouse-clickable stand-in for `select`,
+//     and the new default (see defaultConfig's own comment in register.tsx).
 // Plus the two collapse rules: `select` drops to `cycle` when the resolved
 // Elements table carries no Select at all, and `tabs` drops to `cycle` when
 // the terminal is too narrow for its own Buttons (see tabsGroupWidth in
 // register.tsx) - and the invalid-value fallback (parseConfigRoot keeps
-// `tabs` for anything it does not recognize).
+// `menu` for anything it does not recognize, `menu` being defaultConfig()'s
+// own default since 2026-09-19).
 //
-// Cases (1)-(9) prove the three styles/collapse rules themselves, against
-// the boot() default of both markets holding something (BOTH_HOLDINGS - see
-// its own comment), so every stop each style can draw is always present and
-// the case bodies stay about the switcher, not the holdings gate. Cases
-// (10)-(13) prove the holdings gate itself (marketStops() only offering a
-// market's `:pnl` stop when holdingsFor() actually finds holdings for it -
-// 2026-09-19 regression fix, restoring behavior an earlier `buildCycle(
-// hasUsHoldings)` parameter used to cover for US alone before a later
-// refactor read the tw/us asymmetry as accidental and dropped the whole
-// condition).
+// Cases (1)-(9) prove the three original styles/collapse rules themselves,
+// against the boot() default of both markets holding something
+// (BOTH_HOLDINGS - see its own comment), so every stop each style can draw
+// is always present and the case bodies stay about the switcher, not the
+// holdings gate. Cases (10)-(13) prove the holdings gate itself
+// (marketStops() only offering a market's `:pnl` stop when holdingsFor()
+// actually finds holdings for it - 2026-09-19 regression fix, restoring
+// behavior an earlier `buildCycle(hasUsHoldings)` parameter used to cover
+// for US alone before a later refactor read the tw/us asymmetry as
+// accidental and dropped the whole condition). Cases (14)-(16) prove `menu`
+// itself: the default draws its header and nothing else, pressing the
+// header opens the option column (marketStops() order/labels, only the
+// current stop non-dim), and pressing an option both switches the stop
+// (through the same onSelectMarket every other style already uses) and
+// closes the menu again.
 // Against the REAL register.tsx (bundled), same "stub host, canned
 // $.http.fetch" shape as crypto-feed.mjs - this needs a fully controllable
 // resolve() table (with or without Select) and a controllable viewport
@@ -107,6 +118,23 @@ function drawInfo(tree) {
 // tells a tabs Button apart from the one `cycle` Button (bare
 // `stock-band:market`, no suffix) without hardcoding all five keys twice.
 const isTabButton = b => typeof b.key === 'string' && b.key.startsWith('stock-band:market:')
+
+// `menu`'s own open option column draws `stock-band:market:menu:<value>`
+// (see register.tsx's menu option Buttons) - a stricter prefix than
+// isTabButton's, so a menu option is never mistaken for a tabs Button (both
+// only ever draw under their own marketSwitcher style, but the two harness
+// helpers should still tell them apart on their own, not by which case
+// happens to be running). The bare header Button stays `stock-band:market`,
+// same key `cycle` uses - only its label (the literal `市場：` prefix) says
+// which of the two it is; cases below check the label where that matters.
+const isMenuOptionButton = b => typeof b.key === 'string' && b.key.startsWith('stock-band:market:menu:')
+
+// Mirrors register.tsx's own marketButtonLabel(marketLabel, pnl) off a
+// drawn render's boardProps (`marketLabel` is the board's base label - 台股/
+// 美股/加密貨幣 - `view` says whether the 庫存 suffix belongs on it) - the
+// `menu` header's own on-screen text, cases (14)/(16) check against it
+// rather than hardcoding "台股 ▾"/"美股庫存 ▾" twice.
+const marketButtonLabelFor = boardProps => `${boardProps?.marketLabel}${boardProps?.view === 'pnl' ? '庫存' : ''} ▾`
 
 // Both markets holding something is the shape every case before the
 // holdings-gating fix (10)-(13) below was written against, and stays boot()'s
@@ -431,9 +459,14 @@ async function boot({
 
 // --- (7): an invalid marketSwitcher value falls back to whatever
 // defaultConfig() says (parseConfigRoot's own default-on-anything-unrecognized
-// rule). Asserted against an OMITTED value rather than against a named style,
-// so moving the default - as 2026-09-19 moved it from `tabs` to `cycle` for
-// width - cannot make this case lie about what the fallback is. --------------
+// rule). Asserted first against an OMITTED value rather than against a named
+// style, so moving the default again later cannot make THAT half of this
+// case lie about what the fallback is - the way it moved `tabs` -> `select`
+// -> `menu` across three passes on 2026-09-19. The second half below DOES
+// name `menu` explicitly: `menu` is the current default (see defaultConfig's
+// own comment in register.tsx), and case (14) already proves what its own
+// closed shape looks like, so naming it here is asserting today's actual
+// default, not re-deriving a style-agnostic check case (14) already owns. --
 {
   const bad = await boot({ market: 'tw', canSelect: true, marketSwitcher: '貓' })
   const omitted = await boot({ market: 'tw', canSelect: true })
@@ -444,10 +477,14 @@ async function boot({
       badDraw.buttons.filter(isTabButton).length === defDraw.buttons.filter(isTabButton).length,
     `(7) an invalid marketSwitcher value draws exactly what omitting it draws (bad: ${badDraw.buttons.filter(isTabButton).length} tabs/${badDraw.selects.length} selects, default: ${defDraw.buttons.filter(isTabButton).length} tabs/${defDraw.selects.length} selects)`,
   )
-  // No assertion here on WHICH element the fallback draws: the check above
-  // already pins it to whatever omitting the field draws, and naming a style
-  // is exactly what broke this case when the default moved.
   const { buttons } = badDraw
+  ok(badDraw.selects.length === 0, '(7) the fallback (menu) draws no Select')
+  ok(!buttons.some(isMenuOptionButton), '(7) the fallback (menu) starts closed - no option column drawn yet')
+  const header = buttons.find(b => b.key === 'stock-band:market')
+  ok(
+    typeof header?.label === 'string' && header.label.startsWith('市場：'),
+    `(7) the fallback is specifically menu - its header carries the "市場：" prefix (got ${JSON.stringify(header?.label)})`,
+  )
 }
 
 // --- (8): marketSwitcher:"tabs" but the terminal is too narrow for the five
@@ -587,6 +624,99 @@ async function boot({
   )
   const values = (selects.find(s => s.key === 'stock-band:market')?.options ?? []).map(o => o.value)
   ok(!values.includes('us:pnl'), '(13) the vanished us:pnl stop is also gone from the Select options')
+}
+
+// --- (14): marketSwitcher:"menu" (the default, stated explicitly here) draws
+// only its header Button, closed - no Select, no tabs row, no option column
+// yet (brief: `menu`'s closed shape) ------------------------------------------
+{
+  const { draw } = await boot({ market: 'tw', canSelect: true, marketSwitcher: 'menu' })
+  const { boardProps, buttons, selects } = await draw()
+  ok(selects.length === 0, '(14) no Select drawn under marketSwitcher:"menu"')
+  ok(!buttons.some(isTabButton), '(14) no tabs row drawn under marketSwitcher:"menu"')
+  ok(!buttons.some(isMenuOptionButton), '(14) closed by default - no option column drawn yet')
+
+  const header = buttons.find(b => b.key === 'stock-band:market')
+  ok(!!header, '(14) the header Button is drawn')
+  ok(buttons.filter(b => b.key === 'stock-band:market').length === 1, '(14) exactly one header Button is drawn')
+  ok(
+    header?.label === `市場：${marketButtonLabelFor(boardProps)}`,
+    `(14) the header reads "市場：" + the same label marketButtonLabel builds (got ${JSON.stringify(header?.label)})`,
+  )
+}
+
+// --- (15): pressing the closed menu's header opens the option column - one
+// Button per marketStops() entry, in order, only the current stop non-dim
+// (brief: `menu`'s open shape) ------------------------------------------------
+{
+  const { draw, settle } = await boot({ market: 'tw', canSelect: true, marketSwitcher: 'menu' })
+  let { buttons } = await draw()
+  ok(!buttons.some(isMenuOptionButton), 'sanity: (15) starts closed')
+
+  buttons.find(b => b.key === 'stock-band:market').press()
+  await settle()
+  ;({ buttons } = await draw())
+
+  const options = buttons.filter(isMenuOptionButton)
+  ok(options.length === 5, `(15) pressing the header opens exactly five option Buttons (got ${options.length})`)
+  ok(
+    JSON.stringify(options.map(b => b.key)) ===
+      JSON.stringify([
+        'stock-band:market:menu:tw',
+        'stock-band:market:menu:tw:pnl',
+        'stock-band:market:menu:us',
+        'stock-band:market:menu:us:pnl',
+        'stock-band:market:menu:crypto',
+      ]),
+    `(15) option keys are the five stops' values, in marketStops() order (got ${JSON.stringify(options.map(b => b.key))})`,
+  )
+  ok(
+    JSON.stringify(options.map(b => b.label)) === JSON.stringify(['台股', '台股庫存', '美股', '美股庫存', '加密貨幣']),
+    `(15) option labels are each stop's own full label - same five marketSelectOptions() uses (got ${JSON.stringify(options.map(b => b.label))})`,
+  )
+
+  const active = options.find(b => b.key === 'stock-band:market:menu:tw')
+  const rest = options.filter(b => b.key !== 'stock-band:market:menu:tw')
+  ok(active && active.dimColor === false, `(15) the current stop (台股) is not dimColor (got ${active?.dimColor})`)
+  ok(rest.every(b => b.dimColor === true), `(15) every other option is dimColor (got ${JSON.stringify(rest.map(b => b.dimColor))})`)
+
+  // Pressing the header again closes it back up - the same toggle, not a
+  // one-way door.
+  buttons.find(b => b.key === 'stock-band:market').press()
+  await settle()
+  ;({ buttons } = await draw())
+  ok(!buttons.some(isMenuOptionButton), '(15) pressing the header again closes the option column')
+}
+
+// --- (16): pressing an open menu's option switches market AND view together
+// (the same onSelectMarket state-switch `select`/`tabs` already use, not a
+// second copy of it - brief item 1) and closes the menu on its own -----------
+{
+  const { draw, settle } = await boot({ market: 'us', canSelect: true, marketSwitcher: 'menu' })
+  let { boardProps, buttons } = await draw()
+  ok(boardProps?.market === 'us' && boardProps?.view === 'table', 'sanity: (16) starts on 美股 (table)')
+
+  buttons.find(b => b.key === 'stock-band:market').press() // open
+  await settle()
+  ;({ buttons } = await draw())
+  ok(buttons.filter(isMenuOptionButton).length === 5, 'sanity: (16) menu is open with five options')
+
+  buttons.find(b => b.key === 'stock-band:market:menu:us:pnl').press()
+  await settle()
+  ;({ boardProps, buttons } = await draw())
+  ok(
+    boardProps?.market === 'us' && boardProps?.view === 'pnl',
+    `(16) pressing the 美股庫存 option lands there, same as select's onSelect (market=${boardProps?.market}, view=${boardProps?.view})`,
+  )
+  ok(!buttons.some(isMenuOptionButton), '(16) the next render has no option list - pressing an option closes the menu')
+
+  // The header's own label tracks the new stop, the same way select's own
+  // value/cycle's own label already do.
+  const header = buttons.find(b => b.key === 'stock-band:market')
+  ok(
+    header?.label === `市場：${marketButtonLabelFor(boardProps)}`,
+    `(16) the header label updates to the new stop (got ${JSON.stringify(header?.label)})`,
+  )
 }
 
 done()

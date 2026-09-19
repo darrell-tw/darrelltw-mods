@@ -1,8 +1,8 @@
 {
   "_comment": "Optional: copy to <project>/.claude/stock-band.json. Every key has a default, so a partial file is fine.",
   "market": "auto",
-  "_marketSwitcher_comment": "Which of three styles the band uses to switch market/holdings: \"tabs\" draws all five stops (台股/台股庫存/美股/美股庫存/加密貨幣) as their own Buttons, one press each, and drops to \"cycle\" if the terminal is too narrow to fit them; \"select\" (default) draws the dropdown (falls back to \"cycle\" on a surface with no Select at all, e.g. mobile); \"cycle\" draws one Button that walks all five stops in order. An unrecognized value falls back to \"select\".",
-  "marketSwitcher": "tabs",
+  "_marketSwitcher_comment": "Which of four styles the band uses to switch market/holdings: \"menu\" (default) draws a header Button that opens a column of plain option Buttons below it - every option takes a mouse click, unlike \"select\"'s dropdown; \"select\" draws the engine's own dropdown (falls back to \"cycle\" on a surface with no Select at all, e.g. mobile) - its options only take the keyboard (arrows + Enter) while it holds focus, no click; \"tabs\" draws all five stops (台股/台股庫存/美股/美股庫存/加密貨幣) as their own Buttons, one press each, and drops to \"cycle\" if the terminal is too narrow to fit them; \"cycle\" draws one Button that walks all five stops in order. An unrecognized value falls back to \"menu\".",
+  "marketSwitcher": "menu",
   "refreshMs": 3000,
   "sort": "change",
   "highlight": true,
