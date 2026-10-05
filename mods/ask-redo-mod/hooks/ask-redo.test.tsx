@@ -11,6 +11,8 @@ import {
   descriptionColumns,
   displayWidth,
   fitBand,
+  labelColumns,
+  splitRecommended,
   formatAnswer,
   formatSkip,
   parseChoiceQuestion,
@@ -229,7 +231,7 @@ describe('the band above the prompt', () => {
       ])
       expect(buttons.every(b => b.props.plain === true)).toBe(true)
       expect(await ui.find({ type: 'Text', text: 'Gone when the session ends.' })).toBeDefined()
-      expect(await ui.find({ type: 'Text', text: /按數字選，或直接在下面打字回答/ })).toBeDefined()
+      expect(await ui.find({ type: 'Text', text: /1–3 選 · 直接打字也行/ })).toBeDefined()
     })
   }
 
@@ -262,7 +264,7 @@ describe('the band above the prompt', () => {
       component: 'AbovePrompt',
       props: { ...BAND_PROPS, maxRows: 4, scroll: { offset: 0, bodyRows: 4 } },
     })
-    expect(await ui.find({ type: 'Text', text: /按數字選/ })).toBeUndefined()
+    expect(await ui.find({ type: 'Text', text: /1–3 選/ })).toBeUndefined()
     expect(await ui.find({ type: 'Button', key: 'skip' })).toBeDefined()
     expect(await ui.findAll({ type: 'Button' })).toHaveLength(4)
   })
@@ -474,10 +476,27 @@ describe('pure parts', () => {
     expect(fitBand(PARSED, 100, 20)).toMatchObject({ descriptions: 'wrap', hint: true, question: 'wrap', rows: 5 })
   })
 
-  test('descriptionColumns: what is left beside `n: label`, none when under eight cells', () => {
-    const option = { label: 'Session state', description: 'x' }
-    expect(descriptionColumns(0, option, 40)).toBe(40 - displayWidth('1: Session state') - 2)
-    expect(descriptionColumns(0, option, 24)).toBe(0)
+  test('labelColumns and descriptionColumns: the widest `n: label` (badge included) capped to 40%, the rest for descriptions', () => {
+    expect(labelColumns(PARSED, 100)).toBe(displayWidth('1: Session state'))
+    const starred: AskRedoQuestion = { ...PARSED, options: [{ label: 'Plugin store (Recommended)' }, { label: 'A file' }] }
+    expect(labelColumns(starred, 100)).toBe(displayWidth('1: Plugin store') + displayWidth('★ 建議') + 1)
+    expect(labelColumns(starred, 40)).toBe(16)
+    expect(descriptionColumns(100, 16)).toBe(100 - 2 - 16 - 2)
+    expect(descriptionColumns(24, 16)).toBe(0)
     expect(displayWidth('中文ab')).toBe(6)
+  })
+
+  test('splitRecommended lifts a "(Recommended)" suffix in either language off the label', () => {
+    expect(splitRecommended('Plugin store (Recommended)')).toEqual({ label: 'Plugin store', recommended: true })
+    expect(splitRecommended('永豐 Shioaji（建議）')).toEqual({ label: '永豐 Shioaji', recommended: true })
+    expect(splitRecommended('A file')).toEqual({ label: 'A file', recommended: false })
+    expect(splitRecommended('(Recommended)')).toEqual({ label: '(Recommended)', recommended: false })
+  })
+
+  test('fitBand lays description-less options across one row when they fit', () => {
+    const yesNo: AskRedoQuestion = { question: 'Delete it?', header: 'Cache', options: [{ label: 'Yes' }, { label: 'No' }] }
+    expect(fitBand(yesNo, 60, 20)).toMatchObject({ across: true, rows: 3 })
+    expect(fitBand(yesNo, 12, 20)).toMatchObject({ across: false })
+    expect(fitBand(PARSED, 100, 20).across).toBe(false)
   })
 })

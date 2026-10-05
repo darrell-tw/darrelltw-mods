@@ -199,12 +199,36 @@ function parsePending(value: unknown): AskPending | undefined {
 // view. So the drawing is fitted to `maxRows`: descriptions fold to one
 // truncated line first, then the hint row goes (跳過 moves up beside the
 // question), then the question itself is cut to one line.
+//
+// What makes an option recognisable at a glance, in order of weight:
+// - every option row starts in the same place, with a rail glyph in that
+//   option's own colour (cyan, magenta, yellow, green: the same four ask-mod
+//   paints its cards with), so the eye lands on "which row" before reading
+// - the labels sit in one aligned column, the descriptions in another, so a
+//   downward scan reads the labels alone
+// - a label the model marked as its recommendation ("(Recommended)", 建議,
+//   推薦) loses that suffix and wears a ★ badge instead
+// - options with no descriptions sit on ONE row when they fit, so a yes/no
+//   question costs three rows, not five
 
 const SKIP_LABEL = '跳過'
-const HINT_TYPED = '按數字選，或直接在下面打字回答 · '
-const HINT_DIGITS = '按數字選，打字不算回答 · '
 const ROW_GAP = 2
+const RAIL = '▌'
+const RAIL_WIDTH = 2 // the glyph and a space
 const MIN_DESCRIPTION_COLS = 8
+const LABEL_COL_SHARE = 0.4 // the label column takes at most this share of the band
+const RECOMMENDED_BADGE = '★ 建議'
+const RECOMMENDED_PATTERN = /\s*[（(]\s*(recommended|suggested|建議|推薦|預設|default)\s*[)）]\s*$/iu
+
+/** The colour of option `i`, the same on every drawing of this mod and of ask-mod. */
+export const OPTION_COLORS = ['cyan', 'magenta', 'yellow', 'green'] as const
+export const optionColor = (i: number): string => OPTION_COLORS[i % OPTION_COLORS.length]!
+
+/** A label with its "(Recommended)" suffix lifted off into a flag. */
+export function splitRecommended(label: string): { label: string; recommended: boolean } {
+  const bare = label.replace(RECOMMENDED_PATTERN, '').trim()
+  return bare === '' || bare === label ? { label, recommended: false } : { label: bare, recommended: true }
+}
 
 /** Terminal cells a string takes: CJK and other wide code points count two, combining marks none. */
 export function displayWidth(text: string): number {
@@ -231,11 +255,30 @@ export function displayWidth(text: string): number {
   return width
 }
 
+/** `text` cut to `cols` cells of display width, an ellipsis closing a cut. */
+export function fitWidth(text: string, cols: number): string {
+  if (displayWidth(text) <= cols) return text
+  let out = ''
+  let width = 0
+  for (const ch of text) {
+    const w = displayWidth(ch)
+    if (width + w > cols - 1) break
+    out += ch
+    width += w
+  }
+  return `${out}…`
+}
+
 const rowsOf = (width: number, columns: number): number => Math.max(1, Math.ceil(width / Math.max(1, columns)))
 
 const chipOf = (question: AskRedoQuestion): string => ` ${question.header === '' ? '問題' : question.header} `
-const optionHead = (i: number, option: AskRedoOption): string => `${i + 1}: ${option.label}`
 const SKIP_WIDTH = displayWidth(`0: ${SKIP_LABEL}`)
+const BADGE_WIDTH = displayWidth(RECOMMENDED_BADGE) + 1
+
+/** The hint under the options: which digits answer, that 0 skips, that typing counts. */
+export function hintText(count: number, freeText: boolean): string {
+  return `${count === 1 ? '1' : `1–${count}`} 選${freeText ? ' · 直接打字也行' : ' · 打字不算回答'} · `
+}
 
 export type BandLayout = {
   /** descriptions wrap under their own room, or fold to one truncated line */
@@ -244,14 +287,36 @@ export type BandLayout = {
   hint: boolean
   /** the question wraps, or is cut to one line */
   question: 'wrap' | 'truncate'
+  /** no option carries a description and they all fit on one row: drawn across */
+  across: boolean
+  /** cells of the label column (`n: label`, plus a ★ badge where one is); every option row aligns on it */
+  labelColumns: number
   /** the rows this layout is estimated at */
   rows: number
 }
 
-/** Columns left for an option's description beside its `n: label`, or 0 when too few to bother. */
-export function descriptionColumns(i: number, option: AskRedoOption, columns: number): number {
-  const left = columns - displayWidth(optionHead(i, option)) - ROW_GAP
+const headOf = (i: number, option: AskRedoOption): { text: string; width: number; recommended: boolean } => {
+  const { label, recommended } = splitRecommended(option.label)
+  const text = `${i + 1}: ${label}`
+  return { text, width: displayWidth(text) + (recommended ? BADGE_WIDTH : 0), recommended }
+}
+
+/** The label column: the widest `n: label` (and its badge), capped to a share of the band. */
+export function labelColumns(question: AskRedoQuestion, columns: number): number {
+  const widest = Math.max(...question.options.map((o, i) => headOf(i, o).width))
+  return Math.min(widest, Math.max(12, Math.floor(columns * LABEL_COL_SHARE)))
+}
+
+/** Columns left for a description beside the aligned label column, or 0 when too few to bother. */
+export function descriptionColumns(columns: number, labelCols: number): number {
+  const left = columns - RAIL_WIDTH - labelCols - ROW_GAP
   return left >= MIN_DESCRIPTION_COLS ? left : 0
+}
+
+function fitsAcross(question: AskRedoQuestion, columns: number): boolean {
+  if (question.options.some(o => o.description !== undefined)) return false
+  const width = question.options.reduce((sum, o, i) => sum + RAIL_WIDTH + headOf(i, o).width, 0) + ROW_GAP * (question.options.length - 1)
+  return width <= columns
 }
 
 function estimateRows(
@@ -263,21 +328,26 @@ function estimateRows(
   const topWidth = displayWidth(chipOf(question)) + 1 + displayWidth(question.question)
   const topColumns = layout.hint ? columns : columns - SKIP_WIDTH - ROW_GAP
   let rows = layout.question === 'wrap' ? rowsOf(topWidth, topColumns) : 1
-  question.options.forEach((o, i) => {
-    const room = descriptionColumns(i, o, columns)
-    rows += o.description !== undefined && room > 0 && layout.descriptions === 'wrap' ? rowsOf(displayWidth(o.description), room) : 1
-  })
-  if (layout.hint) rows += rowsOf(displayWidth(freeText ? HINT_TYPED : HINT_DIGITS) + SKIP_WIDTH, columns)
+  if (layout.across) rows += 1
+  else {
+    const room = descriptionColumns(columns, layout.labelColumns)
+    question.options.forEach(o => {
+      rows += o.description !== undefined && room > 0 && layout.descriptions === 'wrap' ? rowsOf(displayWidth(o.description), room) : 1
+    })
+  }
+  if (layout.hint) rows += rowsOf(displayWidth(hintText(question.options.length, freeText)) + SKIP_WIDTH, columns)
   return rows
 }
 
 /** The roomiest layout of the band that fits `maxRows`, else the tightest. */
 export function fitBand(question: AskRedoQuestion, columns: number, maxRows: number, freeText = true): BandLayout {
+  const across = fitsAcross(question, columns)
+  const labelCols = labelColumns(question, columns)
   const tiers: Omit<BandLayout, 'rows'>[] = [
-    { descriptions: 'wrap', hint: true, question: 'wrap' },
-    { descriptions: 'truncate', hint: true, question: 'wrap' },
-    { descriptions: 'truncate', hint: false, question: 'wrap' },
-    { descriptions: 'truncate', hint: false, question: 'truncate' },
+    { descriptions: 'wrap', hint: true, question: 'wrap', across, labelColumns: labelCols },
+    { descriptions: 'truncate', hint: true, question: 'wrap', across, labelColumns: labelCols },
+    { descriptions: 'truncate', hint: false, question: 'wrap', across, labelColumns: labelCols },
+    { descriptions: 'truncate', hint: false, question: 'truncate', across, labelColumns: labelCols },
   ]
   let last: BandLayout | undefined
   for (const tier of tiers) {
@@ -314,13 +384,28 @@ export function drawBand(els: Elements, input: BandInput): RenderElement {
       <Text inverse>{chipOf(question)}</Text> <Text bold>{question.question}</Text>
     </Text>
   )
-  const rows: RenderNode[] = question.options.map((o, i) => {
-    const room = descriptionColumns(i, o, columns)
+  const room = descriptionColumns(columns, layout.labelColumns)
+
+  // one option: its rail, its `n: label` button in the aligned column (a label
+  // wider than the column is cut; the press answers by index, not by text), its
+  // ★ badge, and its description
+  const option = (o: AskRedoOption, i: number): RenderNode => {
+    const head = headOf(i, o)
+    const labelRoom = layout.labelColumns - 3 - (head.recommended ? BADGE_WIDTH : 0)
+    const label = fitWidth(splitRecommended(o.label).label, Math.max(1, labelRoom))
+    const cell = (
+      <Box flexDirection="row" width={layout.across ? undefined : RAIL_WIDTH + layout.labelColumns} flexShrink={0}>
+        <Text color={optionColor(i)}>{RAIL} </Text>
+        <Button key={`option-${i + 1}`} plain hotkey={String(i + 1)} onPress={() => input.onPick(i)}>
+          {label}
+        </Button>
+        {head.recommended && <Text color="yellow"> {RECOMMENDED_BADGE}</Text>}
+      </Box>
+    )
+    if (layout.across) return cell
     return (
       <Box flexDirection="row" gap={ROW_GAP}>
-        <Button key={`option-${i + 1}`} plain hotkey={String(i + 1)} onPress={() => input.onPick(i)}>
-          {o.label}
-        </Button>
+        {cell}
         {o.description !== undefined && room > 0 && (
           <Text dimColor wrap={layout.descriptions === 'wrap' ? 'wrap' : 'truncate-end'}>
             {o.description}
@@ -328,7 +413,11 @@ export function drawBand(els: Elements, input: BandInput): RenderElement {
         )}
       </Box>
     )
-  })
+  }
+  const rows: RenderNode[] = layout.across
+    ? [<Box flexDirection="row" gap={ROW_GAP}>{question.options.map(option)}</Box>]
+    : question.options.map(option)
+
   return (
     <Box flexDirection="column">
       {layout.hint ? (
@@ -342,7 +431,7 @@ export function drawBand(els: Elements, input: BandInput): RenderElement {
       {rows}
       {layout.hint && (
         <Box flexDirection="row">
-          <Text dimColor>{input.freeText ? HINT_TYPED : HINT_DIGITS}</Text>
+          <Text dimColor>{hintText(question.options.length, input.freeText)}</Text>
           {skip}
         </Box>
       )}

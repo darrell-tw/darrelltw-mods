@@ -7,13 +7,26 @@ the empty prompt — or click an option, or just type what you actually think.
 
 ```
  Store  Which store should hold the answers?
-1: Session state  Gone when the session ends.
-2: Plugin store  Survives a restart.
-3: A file
-按數字選，或直接在下面打字回答 · 0: 跳過
-╭──────────────────────────────────────────────────────────────────────╮
-│ >                                                                    │
-╰──────────────────────────────────────────────────────────────────────╯
+▌ 1: Session state        Gone when the session ends; nothing written anywhere.
+▌ 2: Plugin store ★ 建議  Survives a restart; 4 MiB cap shared with everything else the plugin keeps.
+▌ 3: A file               Readable by other tools and by you; needs a path and a format.
+1–3 選 · 直接打字也行 · 0: 跳過
+╭──────────────────────────────────────────────────────────────────────────────────────╮
+│ >                                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+一眼辨識靠四件事：每個選項的軌條 `▌` 和數字用自己的顏色（1 cyan、2 magenta、3 yellow、4
+green，和 ask-mod 比較板的卡片同一套）；標籤對齊成一欄，往下掃只看標籤就夠；模型在標籤
+後面標的「(Recommended)」「（建議）」拿掉改成 ★ 徽章；選項都沒說明時整排畫在一列，是非題
+只占三列：
+
+```
+ Cache  Delete the old cache first?
+▌ 1: Yes, delete it  ▌ 2: No, keep it
+1–2 選 · 直接打字也行 · 0: 跳過
+```
+
 ```
 
 - **按數字**：輸入框是空的時候打 `1`–`4`，不用按 Enter，那個選項就送出（和原生
@@ -187,6 +200,9 @@ bunx -p typescript tsc -p mods/ask-redo-mod
 
 # lint
 bunx --bun oxlint@1.83.0 mods/ask-redo-mod/hooks --deny-warnings
+
+# look at the band as Ink lays it out (mods/ask-mod/scripts/dev/README.md)
+cd mods/ask-mod/scripts/dev && bun install && FORCE_COLOR=0 node render.mjs ask-redo-mod
 ```
 
 The tests drive the whole loop through the engine's test runner: a

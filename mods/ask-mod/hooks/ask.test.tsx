@@ -148,9 +148,9 @@ describe('the strip above the dialog', () => {
       current: { requestId: 't1', questions: base.questions, placed: false },
       metadataSource: 'remember',
     })
-    const all = texts(strip).join('\n')
+    const all = texts(strip).join('')
     expect(all).toContain('↳ 兩種做法都能動')
-    expect(all).toContain('↺ 上次選 A file')
+    expect(all).toContain('↺ 上次選 3 A file')
     expect(all).toContain('2 個選項附預覽，比較板放不下')
     expect(all).toContain('來源 remember')
     expect(engineRows(strip)).toBeLessThanOrEqual(AROUND_THE_DIALOG)
@@ -181,7 +181,7 @@ describe('the strip above the dialog', () => {
       paneWanted: true,
     })
     expect(engineRows(strip)).toBeLessThanOrEqual(AROUND_THE_DIALOG)
-    for (const line of ofType(strip, 'Text').filter(t => t.props.inverse !== true)) {
+    for (const line of (strip as unknown as Tree).children) {
       expect(displayWidth(texts(line).join(''))).toBeLessThanOrEqual(80)
     }
     expect(ofType(strip, 'Markdown')).toHaveLength(0)

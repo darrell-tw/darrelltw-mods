@@ -6,28 +6,46 @@ under "Other" all work as before. This mod adds two things around it:
 
 ```
 Claude 想確認一件事  Store                                        來源 remember
-↳ 兩種做法都能動，差在之後要不要維護一個 schema，我想先問你偏好哪邊。
-↺ 上次選 Plugin store
+↳ 兩種做法都能動，差在之後要不要維護一個 schema，我想先問你偏好哪邊再動手。
+↺ 上次選 2 Plugin store ★
 
 ┌ (the engine's own dialog, untouched) ─────────────────────────────────┐
 │ Which store should hold the answers?                                   │
 │ ❯ 1. Session state   Gone when the session ends.                       │
 │   2. Plugin store    Survives a restart.                               │
-│   3. A file          Readable by other tools.                          │
+│   3. A file          Readable by other tools and by you.               │
 │   4. Type your own answer                                              │
 └────────────────────────────────────────────────────────────────────────┘
 
-╔═ 選項比較 ═══════════════════════════════════════════════════════ ✕ ═╗
-║ 數字對應對話框裡的選項；在對話框按同一個數字就選它。                       ║
-║ Store · Which store should hold the answers?                           ║
-║ ╭ 1 Session state ─────────╮ ╭ 2 Plugin store  ↺ 上次選過 ╮ ╭ 3 A file ─────────────╮ ║
-║ │ Gone when the session    │ │ Survives a restart.        │ │ Readable by other     │ ║
-║ │ ends.                    │ │                            │ │ tools.                │ ║
-║ │                          │ │ @@ -1,3 +1,3 @@            │ │ {                     │ ║
-║ │                          │ │ -const s = readJson(p)     │ │   "a": 1              │ ║
-║ │                          │ │ +const s = readJson(p, {}) │ │ }                     │ ║
-║ ╰──────────────────────────╯ ╰────────────────────────────╯ ╰───────────────────────╯ ║
-╚════════════════════════════════════════════════════════════════════════╝
+╔═ 選項比較 ════════════════════════════════════════════════════════════════════════════════════ ✕ ═╗
+║ 在對話框按同一個數字就選它；顏色對應卡片。                                                              ║
+║                                                                                                      ║
+║  Store  Which store should hold the answers?                                                         ║
+║ ╭────────────────────────────╮ ╭────────────────────────────╮ ╭────────────────────────────╮        ║
+║ │ 1 Session state            │ │ 2 Plugin store             │ │ 3 A file                   │        ║
+║ │ Gone when the session      │ │ ★ 建議 ↺ 上次選過          │ │ Readable by other tools    │        ║
+║ │ ends; nothing written      │ │ Survives a restart; 4 MiB  │ │ and by you; needs a path   │        ║
+║ │ anywhere.                  │ │ cap shared with everything │ │ and a format.              │        ║
+║ │                            │ │ the plugin keeps.          │ │                            │        ║
+║ │                            │ │                            │ │ json · 1 行                │        ║
+║ │                            │ │ diff · +1 −1               │ │ { "answers": { "store":    │        ║
+║ │                            │ │ @@ -1,3 +1,3 @@            │ │ "file" } }                 │        ║
+║ │                            │ │  const store = readJson(p) │ │                            │        ║
+║ │                            │ │ -const cache = new Map()   │ │                            │        ║
+║ │                            │ │ +const cache = new Map(s)  │ │                            │        ║
+║ ╰────────────────────────────╯ ╰────────────────────────────╯ ╰────────────────────────────╯        ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝
+```
+
+Each card's border and digit wear that option's colour (1 cyan, 2 magenta,
+3 yellow, 4 green, the same four ask-redo-mod's band uses), so "the magenta
+one" and "2" are the same thing at a glance; the strip's `↺ 上次選 2` digit
+is painted the same. A label the model marked `(Recommended)` loses the suffix
+and wears `★ 建議` on the badge line instead; a preview says what it is before
+you read it (`diff · +1 −1`, `json · 1 行`); a number question is a slider
+(`5 ├────●─────┤ 20  預設 10 · 間隔 5 檔`); a multi-select question is marked
+`☑ 可複選`.
+
 ```
 
 **Above the dialog: a context strip.** How many questions this round, one
@@ -170,6 +188,9 @@ bunx -p typescript tsc -p mods/ask-mod
 
 # lint
 bunx --bun oxlint@1.83.0 mods/ask-mod/hooks --deny-warnings
+
+# look at the strip and the pane as Ink lays them out (scripts/dev/README.md)
+cd mods/ask-mod/scripts/dev && bun install && FORCE_COLOR=0 node render.mjs ask-mod
 ```
 
 The AskUserQuestion site cannot be mounted in `claude plugin test` (the

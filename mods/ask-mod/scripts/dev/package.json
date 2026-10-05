@@ -1,0 +1,10 @@
+{
+  "name": "ask-mods-dev",
+  "private": true,
+  "type": "module",
+  "description": "Renders ask-mod's and ask-redo-mod's drawings through real Ink, the terminal surface's own layout engine, so a change can be looked at outside Claude Code.",
+  "dependencies": {
+    "ink": "^5.2.1",
+    "react": "^18.3.1"
+  }
+}

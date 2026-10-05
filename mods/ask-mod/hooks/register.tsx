@@ -236,6 +236,23 @@ function wasPicked(entry: AskHistoryEntry | undefined, label: string): boolean {
   return entry.answer.split(',').some(part => part.trim() === label)
 }
 
+export type RecalledPick = { index: number; label: string; recommended: boolean }
+
+/** The options of `q` picked last time, by their place in the question (the digit the dialog answers to). */
+export function recalledPicks(history: AskHistory, q: AskQuestion): RecalledPick[] {
+  const entry = recallAnswer(history, q)
+  if (entry === undefined) return []
+  const picks: RecalledPick[] = []
+  q.options.forEach((o, index) => {
+    if (!wasPicked(entry, o.label)) return
+    const { label, recommended } = splitRecommended(o.label)
+    picks.push({ index, label, recommended })
+  })
+  // an answer typed under "Other" matches no option: still worth a word
+  if (picks.length === 0) picks.push({ index: -1, label: entry.answer, recommended: false })
+  return picks
+}
+
 // --- the lead: what Claude said right before asking ---------------------------------
 
 /** The last paragraph of the last text block, trimmed to one quotable line. */
@@ -411,10 +428,13 @@ export function drawStrip(els: Elements, input: StripInput): RenderElement {
   }
   const sourceShown = source !== '' && displayWidth(source) + 2 <= budget
 
+  // 上次選 lines: the option's digit in its own colour (the digit the dialog
+  // answers to, the colour the pane's card wears), then its label without any
+  // "(Recommended)" suffix, ★ where it had one
   const recalled = questions
     .filter(hasChoices)
-    .map(q => ({ q, entry: recallAnswer(history, q) }))
-    .filter(({ entry }) => entry !== undefined)
+    .map(q => ({ q, picks: recalledPicks(history, q) }))
+    .filter(({ picks }) => picks.length > 0)
     .slice(0, 2)
 
   let note: string | undefined
@@ -441,11 +461,45 @@ export function drawStrip(els: Elements, input: StripInput): RenderElement {
         )}
       </Text>
       {lead !== null && <Text dimColor>{fitWidth(`↳ ${lead.text}`, STRIP_COLS)}</Text>}
-      {recalled.map(({ q, entry }) => (
-        <Text color="yellow">
-          {fitWidth(`↺ ${several && q.header !== '' ? `${q.header}：` : ''}上次選 ${entry!.answer}`, STRIP_COLS)}
-        </Text>
-      ))}
+      {recalled.map(({ q, picks }) => {
+        // the line is several Texts (a colour per digit); its width is kept
+        // under STRIP_COLS by hand, since no one Text can be cut for it
+        const lead = `↺ ${several && q.header !== '' ? `${q.header}：` : ''}上次選`
+        let width = displayWidth(lead)
+        const shown: RenderNode[] = []
+        let left = 0
+        for (const pick of picks) {
+          const label = fitWidth(pick.label, 24)
+          const piece = pick.index >= 0 ? ` ${pick.index + 1} ${label}${pick.recommended ? ' ★' : ''}` : ` 「${label}」`
+          if (width + displayWidth(piece) + 4 > STRIP_COLS) {
+            left = picks.length - shown.length
+            break
+          }
+          width += displayWidth(piece)
+          shown.push(
+            <Text>
+              {' '}
+              {pick.index >= 0 ? (
+                <Text color={optionColor(pick.index)} bold>
+                  {pick.index + 1}{' '}
+                </Text>
+              ) : (
+                '「'
+              )}
+              {label}
+              {pick.index >= 0 ? '' : '」'}
+              {pick.recommended ? <Text color="yellow"> ★</Text> : ''}
+            </Text>,
+          )
+        }
+        return (
+          <Text>
+            <Text color="yellow">{lead}</Text>
+            {shown}
+            {left > 0 && <Text dimColor> +{left}</Text>}
+          </Text>
+        )
+      })}
       {note !== undefined && <Text dimColor>{fitWidth(note, STRIP_COLS)}</Text>}
     </Box>
   )
@@ -457,6 +511,64 @@ export type CompareInput = {
   columns: number
   previewLines: number
   cardMinColumns: number
+}
+
+// What makes an option recognisable at a glance in the pane, in order of
+// weight: every card wears its option's colour on its border and its digit
+// (cyan, magenta, yellow, green: the same four ask-redo-mod's band uses), the
+// label is one line, the badges (★ 建議 for a label the model marked as its
+// recommendation, ↺ 上次選過) are a line of their own so they never wrap into
+// the label, and a preview announces what it is (diff with its +/− count, the
+// code's language, prose) before it is read.
+
+/** The colour of option `i`, the same on every drawing of this mod and of ask-redo-mod. */
+export const OPTION_COLORS = ['cyan', 'magenta', 'yellow', 'green'] as const
+export const optionColor = (i: number): string => OPTION_COLORS[i % OPTION_COLORS.length]!
+
+const RECOMMENDED_PATTERN = /\s*[（(]\s*(recommended|suggested|建議|推薦|預設|default)\s*[)）]\s*$/iu
+
+/** A label with its "(Recommended)" suffix lifted off into a flag. */
+export function splitRecommended(label: string): { label: string; recommended: boolean } {
+  const bare = label.replace(RECOMMENDED_PATTERN, '').trim()
+  return bare === '' || bare === label ? { label, recommended: false } : { label: bare, recommended: true }
+}
+
+/** Lines added and removed in a unified diff. */
+export function diffStats(source: string): { added: number; removed: number } {
+  let added = 0
+  let removed = 0
+  for (const line of source.split('\n')) {
+    if (line.startsWith('+++') || line.startsWith('---')) continue
+    if (line.startsWith('+')) added += 1
+    else if (line.startsWith('-')) removed += 1
+  }
+  return { added, removed }
+}
+
+/** The dim line over a preview saying what it is: `diff · +3 −1`, `json · 12 行`, `說明 · 3 行`. */
+export function previewTag(preview: Preview): string {
+  if (preview.kind === 'diff') {
+    const { added, removed } = diffStats(preview.source)
+    return `diff · +${added} −${removed}`
+  }
+  const lines = (preview.kind === 'code' ? preview.source : preview.text).split('\n').length + preview.hidden
+  const what = preview.kind === 'code' ? (preview.language ?? 'code') : '說明'
+  return `${what} · ${lines} 行`
+}
+
+/** A number question as one line: `5 ├────●────┤ 20  預設 10 · 間隔 5 檔`. */
+export function slider(q: AskQuestion, width: number): string {
+  const { min, max, defaultValue, step, unit } = q
+  if (min === undefined || max === undefined || max <= min) return `# 數字${unit === undefined ? '' : ` ${unit}`}`
+  const track = Math.max(8, Math.min(40, width - displayWidth(`${min} `) - displayWidth(` ${max}`) - 24))
+  const at = defaultValue === undefined ? -1 : Math.round(((Math.min(max, Math.max(min, defaultValue)) - min) / (max - min)) * (track - 1))
+  let bar = ''
+  for (let i = 0; i < track; i++) bar += i === at ? '●' : i === 0 ? '├' : i === track - 1 ? '┤' : '─'
+  const notes: string[] = []
+  if (defaultValue !== undefined) notes.push(`預設 ${defaultValue}`)
+  if (step !== undefined) notes.push(`間隔 ${step}`)
+  const tail = `${notes.join(' · ')}${unit === undefined ? '' : ` ${unit}`}`.trim()
+  return `${min} ${bar} ${max}${tail === '' ? '' : `  ${tail}`}`
 }
 
 /** The compare pane: every question of the round, its options as cards, previews rendered. */
@@ -475,7 +587,7 @@ export function drawCompare(els: Elements, input: CompareInput): RenderElement {
   const several = questions.length > 1
 
   const drawPreview = (preview: Preview): RenderNode[] => {
-    const nodes: RenderNode[] = []
+    const nodes: RenderNode[] = [<Text dimColor>{previewTag(preview)}</Text>]
     if (preview.kind === 'diff') nodes.push(<Code source={preview.source} format="diff" />)
     else if (preview.kind === 'code') nodes.push(<Code source={preview.source} language={preview.language} />)
     else nodes.push(<Markdown text={preview.text} />)
@@ -488,46 +600,50 @@ export function drawCompare(els: Elements, input: CompareInput): RenderElement {
     const remembered = recallAnswer(history, q)
     return (
       <Box flexDirection={width === undefined ? 'column' : 'row'} gap={width === undefined ? 0 : CARD_GAP}>
-        {q.options.map((o, j) => (
-          <Box flexDirection="column" width={width} flexShrink={0} borderStyle="round" borderDimColor paddingX={1}>
-            <Box flexDirection="row" gap={1}>
-              <Text bold>
-                <Text color="cyan">{j + 1}</Text> {o.label}
+        {q.options.map((o, j) => {
+          const { label, recommended } = splitRecommended(o.label)
+          const picked = wasPicked(remembered, o.label)
+          const color = optionColor(j)
+          return (
+            <Box flexDirection="column" width={width} flexShrink={0} borderStyle="round" borderColor={color} paddingX={1}>
+              <Text wrap="truncate-end">
+                <Text color={color} bold>
+                  {j + 1}
+                </Text>{' '}
+                <Text bold>{label}</Text>
               </Text>
-              {wasPicked(remembered, o.label) && <Text color="yellow">↺ 上次選過</Text>}
+              {(recommended || picked) && (
+                <Text wrap="truncate-end">
+                  {recommended && <Text color="yellow">★ 建議 </Text>}
+                  {picked && <Text color="yellow">↺ 上次選過</Text>}
+                </Text>
+              )}
+              {o.description !== undefined && (
+                <Text dimColor wrap="wrap">
+                  {o.description}
+                </Text>
+              )}
+              {o.preview !== undefined && (
+                <Box flexDirection="column" marginTop={1}>
+                  {drawPreview(classifyPreview(o.preview, input.previewLines))}
+                </Box>
+              )}
             </Box>
-            {o.description !== undefined && (
-              <Text dimColor wrap="wrap">
-                {o.description}
-              </Text>
-            )}
-            {o.preview !== undefined && (
-              <Box flexDirection="column" marginTop={1} width={width === undefined ? undefined : width - CARD_CHROME}>
-                {drawPreview(classifyPreview(o.preview, input.previewLines))}
-              </Box>
-            )}
-          </Box>
-        ))}
+          )
+        })}
       </Box>
     )
   }
 
   const drawField = (q: AskQuestion): RenderElement => {
-    const parts: string[] = []
-    if (q.kind === 'number') {
-      const range = q.min !== undefined && q.max !== undefined ? `${q.min}–${q.max}` : ''
-      parts.push(`數字 ${range}${q.unit === undefined ? '' : ` ${q.unit}`}`.trim())
-      if (q.step !== undefined) parts.push(`間隔 ${q.step}`)
-      if (q.defaultValue !== undefined) parts.push(`預設 ${q.defaultValue}`)
-    } else {
-      parts.push('自由輸入')
-      if (q.placeholder !== undefined) parts.push(q.placeholder)
-    }
+    const line =
+      q.kind === 'number'
+        ? slider(q, columns - CARD_CHROME)
+        : `✎ 自由輸入${q.placeholder === undefined ? '' : ` · ${q.placeholder}`}`
     return (
       <Box borderStyle="round" borderDimColor paddingX={1}>
-        <Text dimColor>
-          {KIND_MARK[q.kind]}
-          {parts.join(' · ')}
+        <Text dimColor wrap="truncate-end">
+          {line}
         </Text>
       </Box>
     )
@@ -535,13 +651,15 @@ export function drawCompare(els: Elements, input: CompareInput): RenderElement {
 
   return (
     <Box flexDirection="column">
-      <Text dimColor>數字對應對話框裡的選項；在對話框按同一個數字就選它。</Text>
+      <Text dimColor>在對話框按同一個數字就選它；顏色對應卡片。</Text>
       {questions.map((q, i) => (
         <Box flexDirection="column" marginTop={1}>
           <Text bold wrap="wrap">
             {several ? `${i + 1}/${questions.length} ` : ''}
-            {q.header === '' ? '' : `${q.header} · `}
+            {q.header === '' ? '' : <Text inverse> {q.header} </Text>}
+            {q.header === '' ? '' : ' '}
             {q.question}
+            {q.multiSelect ? <Text color="yellow"> ☑ 可複選</Text> : ''}
           </Text>
           {q.description !== undefined && (
             <Text dimColor wrap="wrap">
