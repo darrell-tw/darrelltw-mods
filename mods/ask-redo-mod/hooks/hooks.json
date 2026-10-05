@@ -1,0 +1,4 @@
+{
+  "description": "ask-redo-mod: answers a single-choice AskUserQuestion at once and collects the person's real answer from the band above the prompt as their next message. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.tsx"]
+}

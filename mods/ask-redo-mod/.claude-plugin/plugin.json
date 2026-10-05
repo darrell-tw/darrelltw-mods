@@ -1,0 +1,41 @@
+{
+  "name": "ask-redo-mod",
+  "version": "0.1.0",
+  "description": "AskUserQuestion, answered from the prompt: a single-choice question from the main conversation is drawn in the band above your prompt instead of the engine's dialog, and you answer it by typing its number in an empty prompt, clicking an option, or simply typing a reply. To get there the mod answers the tool call at once with \"not answered yet\" and tells the model to end its turn, and your answer arrives as your next message - so every question costs a second model round-trip, and a model that ignores the instruction may keep working or guess. Several questions, multi-select, text or number questions, previews, subagents and non-terminal sessions go to the engine's own dialog untouched. Needs function hooks (early access).",
+  "author": {
+    "name": "Darrell Wang",
+    "email": "info@darrelltw.com",
+    "url": "https://x.com/darrell_tw_"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ask-user-question",
+    "band",
+    "above-prompt",
+    "tui",
+    "function-hooks",
+    "free-text",
+    "answer"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "takeover": {
+      "type": "string",
+      "title": "接手哪些問題",
+      "description": "single-choice: 主對話裡只有一題、單選、2–4 個選項、沒有 preview 的 AskUserQuestion，改畫在輸入框上方，你按數字、點選項或直接打字回答（Claude 會先停下來等你，多花一輪）；其他問題一律交給原生對話框。off: 全部交給原生對話框，這個 mod 什麼都不做。",
+      "default": "single-choice",
+      "options": [
+        "single-choice",
+        "off"
+      ],
+      "required": false
+    },
+    "freeText": {
+      "type": "boolean",
+      "title": "打字就算回答",
+      "description": "有問題在等你時，直接在輸入框打的一段話就當作答案送給 Claude（/ 開頭的指令除外）。關掉的話只有按數字或點選項才算回答，打字的內容照常送出，問題繼續掛著。",
+      "default": true,
+      "required": false
+    }
+  }
+}

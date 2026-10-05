@@ -3,8 +3,10 @@
 Claude Code mods I build for myself and then clean up enough to share. They
 draw into places Claude Code already has (the strip above the prompt, the
 AskUserQuestion dialog), they all run on **function hooks** (early access), and
-none of them spend model tokens — nothing here calls `$.model.*` or touches
-your prompt.
+nothing here calls `$.model.*`. All but one leave your prompt and the model's
+tokens alone; the exception is `ask-redo-mod`, which turns your answer to a
+question it took over into your next prompt and so costs a model round-trip per
+question (its README says exactly how).
 
 ## What's in here
 
@@ -12,6 +14,7 @@ your prompt.
 | --- | --- |
 | [`tw-stock-mod`](mods/tw-stock-mod/README.md) | 台股／美股看板。台股時段顯示台股清單（紅漲綠跌），美股時段顯示美股清單（綠漲紅跌），券商風格表格＋Solari 翻牌指數列＋損益模式。台美各 20 檔，報價預設走 Yahoo（免金鑰），永豐 Shioaji 可選，照個人偏好順序（`~/.claude/stock-band.json`） |
 | [`ask-mod`](mods/ask-mod/README.md) | 更好讀的 AskUserQuestion。原生對話框上面加一條脈絡列（幾題、header chips、Claude 問之前最後說的那段話），下面加一塊比較板把所有選項並排攤開：說明、preview 一起看，diff／程式碼 preview 直接著色，上次選過的選項標 ↺。對話框本體和鍵盤操作完全不變 |
+| [`ask-redo-mod`](mods/ask-redo-mod/README.md) | 換掉單選題的 AskUserQuestion。只有一題、單選、2–4 個選項的問題改畫在輸入框上方，空白輸入框按數字就選、點選項也行，或直接打一段話當答案。Claude 會先停下來等你，答案當成你的下一則訊息送回去：每題多一輪模型往返，模型不聽話時也可能自己猜。其他題型照樣是原生對話框，和 `ask-mod` 可以一起裝 |
 
 More will land here. The marketplace is named after me rather than after what
 is in it, so adding an unrelated mod later does not make the name a lie.

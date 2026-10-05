@@ -6,7 +6,7 @@
     "url": "https://x.com/darrell_tw_"
   },
   "metadata": {
-    "description": "Darrell Wang 做的 Claude Code mods：都在輸入框上面那條區域畫東西，都不花模型 token"
+    "description": "Darrell Wang 做的 Claude Code mods：在輸入框上面那條區域和 AskUserQuestion 周圍畫東西；除了 ask-redo-mod（每題多一輪模型往返）都不花模型 token"
   },
   "plugins": [
     {
@@ -20,6 +20,12 @@
       "source": "./mods/ask-mod",
       "category": "productivity",
       "description": "把 AskUserQuestion 對話框包起來：上面一條脈絡列（幾題、每題的 header、Claude 問之前最後說的那段話），下面一塊比較板把所有選項並排攤開，說明和 preview 一起看，diff／程式碼 preview 直接著色，上次選過的選項標 ↺。原生對話框留在中間、鍵盤操作不變。零模型 token。"
+    },
+    {
+      "name": "ask-redo-mod",
+      "source": "./mods/ask-redo-mod",
+      "category": "productivity",
+      "description": "換掉單選題的 AskUserQuestion：只有一題、單選、2–4 個選項的問題不開原生對話框，改畫在輸入框上方，空白輸入框按數字就選、點選項也行，或直接打一段話當答案。代價是 Claude 會先停下來等你，答案當成你的下一則訊息送回去，每題多一輪模型往返；模型不聽話時也可能自己猜。多題、複選、文字／數字題、有 preview 的題、subagent 問的題，照樣交給原生對話框。"
     }
   ]
 }

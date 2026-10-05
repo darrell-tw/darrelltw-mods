@@ -126,3 +126,88 @@ Sources: `cc-arcade-ref` (github.com/sezaakgun/cc-arcade, cloned `--depth 1`) an
   function and feed it a plain element table instead; mount `Pane` for the rest.
 - `setTimeout` is not declared in the test environment's types; wait on a
   `state.set` spy resolving a promise instead of polling.
+
+## The AbovePrompt site (verified 2026-10-05 against 2.1.289's own bundle)
+- **The dialog's rules do not apply to the band.** The validator `NYn(tree,
+  component, opts)` sets `x = component === "AskUserQuestion"` and `T = x ||
+  opts.within === "AskUserQuestion"`; the 12-row budget, the no-`Markdown`
+  rule, the no-`width`/`height`/`position`/offset rule and the one-engine-node
+  rule are all gated on `T` (or `x`). For `AbovePrompt` only the general rules
+  hold: at most 20000 nodes (`qIe`), depth 32 (`VIe`), a text child of at most
+  10000 characters (`VU`) holding no control character, 100000 characters of
+  text in all (`vZ`), every element from the surface's table with its prop
+  allow-list, `Input`/`Select`/`Markdown`/`Client`/`Raster`/`Image` keys unique,
+  and the Raster-cell and Image-byte caps. Nothing bounds its rows:
+  `e.props.maxRows` (d.ts:9723) is a layout budget, and a taller tree scrolls in
+  a window of `scroll.bodyRows` with the engine's `n more` cue under it.
+- **The bare-digit press** (d.ts:8876, 9730) is the composer hook `Wm` (the
+  engine's own feedback card answers its 0/1/2 through it too), armed by the
+  band with `enabled: !hasSurvey && <drawn tree has a hotkeyed Button>` (and not
+  while the person collapsed the band). It fires when the composer's value
+  becomes exactly one character that is a digit hotkey of a Button wholly inside
+  the scroll window (NFKC-normalized, so a full-width `１` counts; the AZERTY
+  remap `zIe` of `&é"'(-è_çà` sits on the Enter path only, which the band turns
+  off), after a 400 ms debounce (`AZ=400`), never within 600 ms of the band
+  arming (`cp=600`), and empties the composer. The band passes `enterConfirms:
+  false`, so Enter on a lone digit does NOT press: it submits the digit as an
+  ordinary prompt. A mod that wants a typed `1⏎` to count as option 1 maps the
+  lone-digit prompt itself at `prompt.submit`.
+
+## Answering a tool call from a hook (2.1.289 bundle)
+- **A hook's own `{ result }` is validated against the tool's output schema**
+  (d.ts:12156): core runs `tool.outputSchema?.safeParse(result)` and on a
+  mismatch the model gets an error result, `tool.call step resolved <Tool>
+  with a result that does not match its output shape: ...`. On success the
+  parsed value (defaults filled in) goes through the tool's own
+  `mapToolResultToToolResultBlockParam`, exactly as the tool's own result would.
+- **AskUserQuestion's output schema** requires `questions` (the question
+  objects, `kind`/`description`/... optional) and `answers` (a record of
+  string to string); `response`, `annotations`, `afkTimeoutMs` (a positive
+  integer) and `followUp` are optional. Its mapper reads, in order:
+  `afkTimeoutMs` set (an "away from keyboard, proceed with your best judgment"
+  text), `followUp` (call AskUserQuestion again), a non-blank `response`
+  printed as **`The user responded: <response>`**, the answers, and with none
+  of these `The user did not answer the questions.` So a hook that answers "not
+  yet" writes its `response` to read after "The user responded: ".
+- A hook's `context` on a `tool.call` answer is one reminder after the result
+  (d.ts:12165); the model reads it, the person never sees it.
+- `next.origin.plugin` is `"engine"` on the model's own call. Another plugin's
+  `$.ui.ask` (d.ts:2332) is a `tool.call` of AskUserQuestion through every hook
+  but the caller's, with `next.origin.plugin` naming that plugin: a hook that
+  answers AskUserQuestion itself must pass those through, or it answers the
+  other plugin's question with nothing.
+
+## `$.prompt.submit` from a plugin (d.ts:4558, 8470, 8516)
+- `PromptSubmitArgs` is `{ text, attachments?, asUser? }`: `origin`, `turnId`,
+  `wait` and `context` are the engine's. The prompt is queued and starts a turn
+  of its own once the session is idle, never folded into a running turn; the
+  call resolves as that turn starts (reference.md, "Work that outlives a
+  dispatch").
+- Every hook sees `origin: { kind: 'plugin', name, asUser? }`, so a
+  `prompt.submit` hook keyed on `origin.kind === 'composer'` (the person's own
+  Enter) never sees its own plugin's submission. Without `asUser` the model
+  reads "The <name> plugin sent a message: ..."; with `asUser: true` it reads
+  the text bare. `@file` mentions and pasted images are not expanded either way.
+- A `prompt.submit` hook that rewrites the person's prompt does it with
+  `next({ ...e, text })`; `next` resolves `{ drop }` when a settings hook beneath
+  refused it, which the hook can use to undo what it did on the way down.
+
+## More `claude plugin test` facts (2.1.289)
+- `session.surfaces` and `session.id` have no implementation in a test: a
+  plugin that calls them needs bottoms, `on('session.surfaces', () => ({ value:
+  ['terminal'] }))` and `on('session.id', () => ({ value: 'sess-1' }))`.
+  `session.end`'s bottom returns `{ sessionId }`; `prompt.submit`'s returns the
+  `PromptSubmitResult` itself (`{ text }` or `{ drop }`), not `{ value }`.
+- The test's `$.prompt.submit` takes the whole `PromptSubmitInput` (`text`,
+  `wait`, `origin`), not a plugin's `PromptSubmitArgs`.
+- The test's `on` refuses a second matcher-less hook on one event (`hooks module
+  did not load: on("store.set") registered twice`), and `mock.store` registers
+  matcher-less `store.*` hooks: a store spy beside it needs a matcher (a RegExp
+  works, `{ key: /^pending\// }`), and `mock.store` is called once per test
+  (give it the starting entries there). `claude plugin validate` refuses the
+  same in a module, even with an early `return` between the two `on` calls.
+- `agentId` given to `$.tool.call` (cast past `ToolCallArgs`, which does not
+  list it) reaches the hook as `e.agentId`.
+- After a press that clears what a band draws from, the redraw falls through to
+  `next(e)`, so a test that presses needs its own `ui.render` bottom for the
+  component even when the first draw never reached it.
