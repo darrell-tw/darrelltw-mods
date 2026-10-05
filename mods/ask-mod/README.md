@@ -1,5 +1,7 @@
 # ask-mod
 
+![preview](prototype/ask-mod-strip-dialog-pane.png)
+
 A richer AskUserQuestion. The engine's own dialog stays exactly where it is and
 keeps the keyboard — arrows, Enter, number keys, Tab between questions, typing
 under "Other" all work as before. This mod adds two things around it:
@@ -191,6 +193,9 @@ bunx --bun oxlint@1.83.0 mods/ask-mod/hooks --deny-warnings
 
 # look at the strip and the pane as Ink lays them out (scripts/dev/README.md)
 cd mods/ask-mod/scripts/dev && bun install && FORCE_COLOR=0 node render.mjs ask-mod
+
+# the preview PNGs in prototype/ (needs a global playwright and its chromium)
+FORCE_COLOR=1 PW=$(npm root -g)/playwright/index.mjs node shot.mjs ../../prototype
 ```
 
 The AskUserQuestion site cannot be mounted in `claude plugin test` (the

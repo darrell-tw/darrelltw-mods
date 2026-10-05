@@ -35,3 +35,10 @@ is the harness's `padEnd`, not the layout.
 
 Add a scenario to `scenarios-<mod>.mjs`: `{ title, columns, tree: (mod, els) =>
 ... }`, where `mod` is the bundled module and `els` the element table.
+
+`shot.mjs` goes one step further and screenshots the coloured frames through
+Chromium (`FORCE_COLOR=1 PW=$(npm root -g)/playwright/index.mjs node shot.mjs
+<outdir>`): the PNGs under each mod's `prototype/` come from it. The engine's
+own dialog in those pictures is a hand-written mock; everything else is the
+mod's drawing. A browser's CJK font is not exactly two cells wide, so a row
+holding Chinese text may show a border one cell off there; a terminal does not.

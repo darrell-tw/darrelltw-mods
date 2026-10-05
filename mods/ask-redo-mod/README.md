@@ -1,5 +1,7 @@
 # ask-redo-mod
 
+![preview](prototype/ask-redo-band.png)
+
 AskUserQuestion，從輸入框回答。A single-choice question from Claude no longer
 opens the engine's dialog: it is drawn in the band right above your prompt, and
 you answer it the way you answer the engine's own surveys — type its number in
