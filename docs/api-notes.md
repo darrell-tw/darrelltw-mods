@@ -43,3 +43,86 @@ Sources: `cc-arcade-ref` (github.com/sezaakgun/cc-arcade, cloned `--depth 1`) an
 - Persistent user-level install: `claude plugin marketplace add <local-path-or-repo>` then `claude plugin install <name>@<marketplace>`.
 - `claude plugin validate <path>` validates a plugin or marketplace manifest (no interactive session needed).
 - Real type-checking needs `/plugin-types` run inside an interactive session first (writes gitignored `.claude/types/`) — **not available to this non-interactive run**; flagged as unverified in the final report.
+
+## The AskUserQuestion render site (verified 2026-10-05 against 2.1.289's own bundle)
+- `ui.render` is raised on `{ component: 'AskUserQuestion' }` on every surface
+  (d.ts `RenderPropsOf.AskUserQuestion`: `tool`, `questions: unknown[]`,
+  `metadataSource?`). `requestId` is the call's `tool_use_id`.
+- **A hook keeps the engine's dialog by wrapping it, not replacing it:** `const
+  own = await next(e)` resolves to the engine's own dialog tree (an `engine`
+  node), and the hook returns a `Box` with `own` as one child among its own.
+  Keyboard handling stays the engine's because the dialog is still the engine's
+  element. This is exactly what the engine's built-in hot-reload mod does on
+  this site (its registration reads `i("ui.render",{component:"AskUserQuestion",
+  ...},async(t,e,f)=>{let o=await f(e); ... return Tt(t.ui.resolve(e),o,...)})`
+  in the 2.1.289 bundle), so it is the supported shape.
+- **The tree around the dialog is validated by hard rules** (the validator
+  `NYn` in the bundle, its constants `ibt=12`, `yvn=40`, `S6r=2`,
+  `C6r={padding:2,paddingY:2,paddingTop:1,paddingBottom:1,margin:2,marginY:2,
+  marginTop:1,marginBottom:1}`). A tree that breaks one is refused whole and
+  the engine draws its own dialog with none of the hook's additions:
+  - **exactly one engine node** (`${J} engine nodes; AskUserQuestion is drawn by
+    exactly one`), and **nothing after it** in document order (`draws below the
+    dialog`). Everything a mod adds goes above the dialog.
+  - **at most 12 estimated rows** around the dialog (`more than 12 rows around
+    the dialog`). The estimate per node: a string child is 1 row (0 inside an
+    inline element such as `Text`) + its newlines + `floor(width / 40)`; a
+    `Text` element adds 1 unless already inside an inline element (so a `Text`
+    with nested `Text` chips counts once); `borderStyle` adds 2; `padding`/
+    `margin` add 2 per unit, `paddingY`/`marginY` 2, `paddingTop`/`Bottom` and
+    `marginTop`/`Bottom` 1; `gap`/`rowGap` add their value once per child; a
+    `Code` counts its lines, a `Markdown` its lines + 1. Row direction does not
+    matter: children of a `flexDirection="row"` Box are summed as if stacked.
+  - **no `Markdown`** (`Markdown around the dialog (its rows are not bounded
+    there)`); `Code` is fine.
+  - **no `width`, `height`, `minWidth`, `minHeight`, `position`, `top`, `left`,
+    `right`, `bottom`** on any element, nor as hover overrides (`Box prop
+    "width" around the dialog`). Side-by-side cards with fixed widths are out.
+  - the engine node may not sit inside an inline element or under a Box with
+    `display`/`overflow`/`position` or any of the props above.
+- **Owning the dialog is not possible from a mod.** No API answers a dialog a
+  plugin drew itself, and `tool.call` cannot wait for the person either:
+  `HookBudget.ms` is `10_000` of the hook's own time per dispatch, waits on
+  `next` and `$` excepted but `$.clock.sleep` included (d.ts ~4927). A
+  `tool.call` hook that opens a pane and awaits a press times out before anyone
+  has read the options. Awaiting `next(e)` is free, though, so a `tool.call`
+  hook can open a pane before `next(e)` and close it after: that is where
+  ask-mod's compare board lives.
+- A pane opened from a `tool.call` hook is "unasked": the engine seats it only
+  from 144 columns (110 once the person opened that id by hand), and
+  `$.ui.open` resolves `{ isPlaced: false, reason }` below that. A pane opened
+  from `command.run` is asked and seats at any width. Check `isPlaced` and
+  close an unplaced pane, or it seats itself when the terminal widens later.
+- `$.ui.notice(tool_use_id, text)` adds one dim line under the open dialog and
+  is the cheap alternative when all you want is a note, not a layout.
+- Rewriting `e.props.questions` via `next({ ...e, props })` is allowed but the
+  rewrite "must still fit the tool's schema or the original is drawn".
+- Every element ask-mod draws (`Box`, `Text`, `Button`, `Code`, `Markdown`) is
+  in all four surface tables (d.ts `Elements`); `Input`/`Select` are missing on
+  mobile, `Client` on vscode and mobile, `Raster`/`Image` are terminal-only.
+- `Code` and `Markdown` take at most 10000 characters with tab and newline as
+  the only control characters; a `Code format="diff"` whose source does not
+  parse as hunks is drawn as plain code (so never cut a diff to fit).
+
+## `claude plugin test` facts (2.1.289)
+- Nothing stands beneath the plugins: every event the plugin raises or the
+  test calls on `$` needs a bottom the test registers with `on(...)`, or the
+  call fails `no implementation for <event>`. `mock.clock`, `mock.store` and
+  `mock.env` are the ready-made bottoms for those three nouns; `$.state` is
+  served by the host and needs none.
+- An "op event" bottom (`ui.open`, `ui.close`, `command.register`, `store.*`,
+  ...) answers `{ value }` or `{ deny }`, not the bare value: `on('ui.open', ()
+  => ({ value: { isPlaced: true } }))`, `on('ui.close', () => ({ value:
+  undefined }))`, `on('command.register', (_, e) => ({ value: { command: e.name
+  } }))`. A bare value is `skipped: returned neither { value } nor { deny }`.
+  `session.start`'s bottom returns `{ cwd }`, `tool.call`'s `{ result }`.
+- The test's `$` (`Engine`) has no `state`, `store` or `ui.close`: read a
+  plugin's state by spying `on('state.set', { plugin, key }, (_, e, next) =>
+  { seen.push(e.value); return next(e) })`, and the store by spying
+  `store.set` **before** `mock.store(on)` (the mock answers without `next`).
+- **`AskUserQuestion` cannot be mounted in a test**: the site insists on exactly
+  one `engine` node, which only the real engine's bottom produces; a test's
+  own `ui.render` bottom yields `0 engine nodes`. Draw the strip through a pure
+  function and feed it a plain element table instead; mount `Pane` for the rest.
+- `setTimeout` is not declared in the test environment's types; wait on a
+  `state.set` spy resolving a promise instead of polling.

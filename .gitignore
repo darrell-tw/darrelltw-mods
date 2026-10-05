@@ -2,6 +2,8 @@
 .claude/*
 !.claude/settings.json
 mods/*/.claude/
+# the engine lays a mod's types here when it loads the folder; same story
+mods/*/.claude-plugin/types/
 
 node_modules/
 bun.lock

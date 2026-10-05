@@ -1,0 +1,63 @@
+{
+  "name": "ask-mod",
+  "version": "0.1.0",
+  "description": "A richer AskUserQuestion: a context strip above the engine's own dialog (how many questions, their header chips, who asked, the paragraph Claude wrote right before asking, and 上次選過 for a question you have answered before) and a compare pane beside or below it that lays every option out as a card with its description and its preview rendered - a diff as a diff, fenced code as code, prose as markdown - so you read all of them at once instead of one focused option at a time. The dialog itself is untouched and keeps the keyboard. Needs function hooks (early access). Zero model tokens.",
+  "author": {
+    "name": "Darrell Wang",
+    "email": "info@darrelltw.com",
+    "url": "https://x.com/darrell_tw_"
+  },
+  "license": "MIT",
+  "keywords": [
+    "ask-user-question",
+    "dialog",
+    "pane",
+    "tui",
+    "function-hooks",
+    "compare",
+    "preview"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "compare": {
+      "type": "string",
+      "title": "比較板",
+      "description": "auto: 這一輪有 preview、不只一題、或至少一半選項帶說明時自動開比較板（原生對話框一次只給你看一塊的情況）；always: 每一輪有選擇題就開；off: 不開、也不註冊 /ask-compare，只留對話框上面的脈絡列。你自己的動作優先：/ask-compare 這個 session 都開，手動關掉就這個 session 都不開。",
+      "default": "auto",
+      "options": [
+        "auto",
+        "always",
+        "off"
+      ],
+      "required": false
+    },
+    "showLead": {
+      "type": "boolean",
+      "title": "顯示上文",
+      "description": "在對話框上方帶一行 Claude 問這題之前最後寫的那段話，提醒你它為什麼問。",
+      "default": true,
+      "required": false
+    },
+    "showHistory": {
+      "type": "boolean",
+      "title": "標記上次選過",
+      "description": "記住你對每個問題選了什麼（跨 session），下次同一題再出現時在脈絡列寫一行 ↺ 上次選 …，比較板的那張卡也標 ↺ 上次選過。",
+      "default": true,
+      "required": false
+    },
+    "previewLines": {
+      "type": "number",
+      "title": "每張卡的 preview 行數上限",
+      "description": "超過的行數折起來，卡片底部寫還有幾行。diff 不折，折了就畫不出 diff 著色。",
+      "default": 12,
+      "required": false
+    },
+    "cardMinColumns": {
+      "type": "number",
+      "title": "並排卡片的最小寬度",
+      "description": "比較板夠寬、每張卡至少能有這麼多格時選項才並排；不夠就改成上下堆疊。",
+      "default": 28,
+      "required": false
+    }
+  }
+}

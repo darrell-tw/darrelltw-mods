@@ -14,6 +14,12 @@
       "source": "./mods/tw-stock-mod",
       "category": "productivity",
       "description": "台股／美股看板：紅漲綠跌（台股）／綠漲紅跌（美股），券商風格表格，還有一個損益模式看你的庫存。報價預設走 Yahoo，免金鑰；永豐 Shioaji（macOS／Linux）與群益 Capital（Windows）是可選的即時路線，照個人偏好順序（`~/.claude/stock-band.json`）嘗試。零模型 token。"
+    },
+    {
+      "name": "ask-mod",
+      "source": "./mods/ask-mod",
+      "category": "productivity",
+      "description": "把 AskUserQuestion 對話框包起來：上面一條脈絡列（幾題、每題的 header、Claude 問之前最後說的那段話），下面一塊比較板把所有選項並排攤開，說明和 preview 一起看，diff／程式碼 preview 直接著色，上次選過的選項標 ↺。原生對話框留在中間、鍵盤操作不變。零模型 token。"
     }
   ]
 }
